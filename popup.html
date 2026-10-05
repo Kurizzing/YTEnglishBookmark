@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>영어 듣기 북마크</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="core.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>EngBookmark</span><span class="local">LOCAL</span></div>
+    <h1>다시 듣고, 익숙해지기.</h1>
+    <p>놓친 한 문장을 나만의 듣기 노트에.</p>
+    <div class="shortcuts"><span><kbd>Q</kbd> 시점 저장</span><span><kbd>W</kbd><span class="twice">× 2</span> 구간 저장</span></div>
+  </header>
+  <main>
+    <div class="toolbar"><div><h2>내 북마크</h2><span id="total">0개</span></div><button id="delete-selected" class="text-button danger" disabled>선택 삭제</button></div>
+    <div id="message" role="status" hidden></div>
+    <div id="tree" aria-label="날짜별 북마크"></div>
+    <div id="empty" hidden><div class="empty-mark">↺</div><h2>다시 듣고 싶은 순간을 모아보세요</h2><p>유튜브 영상을 보며 <kbd>Q</kbd>를 누르면 저장됩니다.<br><kbd>W</kbd>를 두 번 누르면 반복할 구간을 저장합니다.</p><a href="https://www.youtube.com/" target="_blank" rel="noopener">유튜브 열기 <span>↗</span></a></div>
+  </main>
+  <footer><span class="dot"></span> 이 크롬에 저장됨 <span class="footer-right">구간 클릭으로 반복 · Esc로 해제</span></footer>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog"><h2 id="confirm-title">북마크를 삭제할까요?</h2><p id="confirm-description"></p><div class="dialog-actions"><button value="cancel" autofocus>취소</button><button value="delete" class="delete-confirm">삭제</button></div></form>
+  </dialog>
+</body>
+</html>
