@@ -42,7 +42,8 @@ async function main() {
           }
           return { ok: true };
         } },
-        storage: { onChanged: { addListener(listener) { testState.listeners.push(listener); } } }
+        storage: { onChanged: { addListener(listener) { testState.listeners.push(listener); } } },
+        windows: { async getCurrent() { return { id: 7 }; } }
       };
     `);
     browser = spawn(chromePath, ["--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"], { windowsHide: true, stdio: "ignore" });
@@ -88,7 +89,9 @@ async function main() {
     await cdp("Emulation.setDeviceMetricsOverride", { width: 420, height: 600, deviceScaleFactor: 1, mobile: false });
     await cdp("Page.navigate", { url: pathToFileURL(path.join(fixture, "popup.html")).href });
     await until("document.querySelectorAll('.bookmark').length === 4");
-    assert.equal(await evaluate("document.querySelectorAll('details[open]').length"), 3);
+    assert.equal(await evaluate("document.querySelectorAll('details[open]').length"), 2);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('#tree > details > summary .folder-name')].map(node => node.textContent)"), ["10월", "12월"]);
+    assert.equal(await evaluate("document.querySelector('header h1, header p') === null"), true);
     assert.equal(await evaluate("document.documentElement.scrollWidth"), 420);
     assert.equal(await evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), true);
     assert.equal(await evaluate("document.querySelector('footer').getBoundingClientRect().bottom <= 600"), true);
@@ -97,7 +100,17 @@ async function main() {
     const screenshot = await cdp("Page.captureScreenshot", { format: "png" });
     await fs.writeFile(path.join(output, "popup.png"), Buffer.from(screenshot.data, "base64"));
     await evaluate("document.querySelector('.play').click()");
-    await until("testState.calls.some(call => call.type === 'PLAY' && call.id === 'two')");
+    await until("testState.calls.some(call => call.type === 'PLAY' && call.id === 'two' && call.windowId === 7)");
+    await evaluate("document.querySelectorAll('.play')[1].click()");
+    await until("testState.calls.some(call => call.type === 'PLAY' && call.id === 'one' && call.windowId === 7)");
+    assert.equal(await evaluate("document.querySelectorAll('.bookmark').length"), 4);
+    // Same month in another year gets a year label, not an extra folder level.
+    await evaluate("testState.bookmarks[3].date = '2025-10-05'; testState.listeners.forEach(listener => listener({ bookmarks: {} }, 'local'))");
+    await until("document.querySelectorAll('#tree > details > summary .folder-name')[1].textContent === '2025년 10월'");
+    assert.equal(await evaluate("document.querySelector('#tree > details > summary .folder-name').textContent"), "2026년 10월");
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 320, height: 720, deviceScaleFactor: 1, mobile: false });
+    assert.equal(await evaluate("document.documentElement.scrollWidth <= 320"), true);
+    assert.equal(await evaluate("document.querySelector('footer').getBoundingClientRect().bottom <= 720"), true);
     await evaluate("document.querySelector('.item-delete').click()");
     assert.equal(await evaluate("document.querySelector('dialog').open"), true);
     await evaluate("document.querySelector('button[value=cancel]').click()");
@@ -118,7 +131,7 @@ async function main() {
     const empty = await cdp("Page.captureScreenshot", { format: "png" });
     await fs.writeFile(path.join(output, "empty.png"), Buffer.from(empty.data, "base64"));
     assert.deepEqual(errors, []);
-    console.log("PASS: Chrome popup layout, play request, cancel, individual/selected/folder deletion and empty state.");
+    console.log("PASS: Side panel layout at 420px/320px, conditional year labels, repeated play requests, cancel, individual/selected/folder deletion and empty state.");
     console.log(`Screenshots: ${output}`);
     await cdp("Browser.close");
   } finally {

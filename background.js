@@ -1,6 +1,8 @@
 "use strict";
 importScripts("core.js");
 
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+
 const queue = EngBookmark.serialQueue();
 const getBookmarks = async () => (await chrome.storage.local.get("bookmarks")).bookmarks || [];
 const getPlayback = async () => (await chrome.storage.session.get("playback")).playback || null;
@@ -35,7 +37,7 @@ async function dispatch(message, sender) {
     case "PLAY": {
       const bookmark = (await getBookmarks()).find(item => item.id === message.id);
       if (!bookmark) throw new Error("삭제된 북마크입니다. 목록을 다시 확인해 주세요.");
-      const window = await chrome.windows.getLastFocused();
+      const window = Number.isInteger(message.windowId) ? await chrome.windows.get(message.windowId) : await chrome.windows.getLastFocused();
       const tabs = await chrome.tabs.query({ url: "https://www.youtube.com/*" });
       let tab = EngBookmark.chooseTab(tabs, bookmark.videoId, window.id);
       const previous = await getPlayback();

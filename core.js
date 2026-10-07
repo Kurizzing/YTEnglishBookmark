@@ -43,31 +43,37 @@
   }
 
   function groupBookmarks(bookmarks) {
-    const years = new Map();
+    const months = new Map();
     const sorted = [...bookmarks].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
     for (const bookmark of sorted) {
       const [year, month, day] = bookmark.date.split("-");
-      if (!years.has(year)) years.set(year, { key: year, label: `${year}년`, children: new Map(), ids: [] });
-      const yearNode = years.get(year);
       const monthKey = `${year}-${month}`;
-      if (!yearNode.children.has(month)) yearNode.children.set(month, { key: monthKey, label: `${Number(month)}월`, children: new Map(), ids: [] });
-      const monthNode = yearNode.children.get(month);
+      if (!months.has(monthKey)) months.set(monthKey, { key: monthKey, label: `${Number(month)}월`, children: new Map(), ids: [] });
+      const monthNode = months.get(monthKey);
       if (!monthNode.children.has(day)) monthNode.children.set(day, { key: bookmark.date, label: `${Number(day)}일`, bookmarks: [], ids: [] });
       const dayNode = monthNode.children.get(day);
-      yearNode.ids.push(bookmark.id);
       monthNode.ids.push(bookmark.id);
       dayNode.ids.push(bookmark.id);
       dayNode.bookmarks.push(bookmark);
     }
-    return [...years.values()];
+    const monthCounts = new Map();
+    for (const key of months.keys()) {
+      const month = key.slice(5);
+      monthCounts.set(month, (monthCounts.get(month) || 0) + 1);
+    }
+    for (const node of months.values()) {
+      const [year, month] = node.key.split("-");
+      if (monthCounts.get(month) > 1) node.label = `${year}년 ${Number(month)}월`;
+    }
+    return [...months.values()];
   }
 
   function chooseTab(tabs, id, windowId) {
     const eligible = tabs.filter(tab => {
-      try { return new URL(tab.url).origin === "https://www.youtube.com"; } catch { return false; }
+      try { return tab.windowId === windowId && new URL(tab.url).origin === "https://www.youtube.com"; } catch { return false; }
     });
-    const rank = tab => videoId(tab.url) === id ? (tab.windowId === windowId ? 0 : 1) : (tab.windowId === windowId ? 2 : 3);
-    return eligible.filter(tab => rank(tab) < 3).sort((a, b) => rank(a) - rank(b) || (b.lastAccessed || 0) - (a.lastAccessed || 0))[0] || null;
+    const rank = tab => videoId(tab.url) === id ? 0 : 1;
+    return eligible.sort((a, b) => rank(a) - rank(b) || (b.lastAccessed || 0) - (a.lastAccessed || 0))[0] || null;
   }
 
   function serialQueue() {

@@ -19,7 +19,8 @@ function harness(existing = {}) {
   const chrome = {
     runtime: { id: "test", onMessage: { addListener(fn) { listener = fn; } } },
     storage: { local: area(local), session: area(session) },
-    windows: { async getLastFocused() { return { id: 1 }; }, async update(id) { events.push(["focus", id]); } },
+    sidePanel: { async setPanelBehavior(options) { events.push(["panelBehavior", options.openPanelOnActionClick]); } },
+    windows: { async getLastFocused() { return { id: 1 }; }, async get(id) { return { id }; }, async update(id) { events.push(["focus", id]); } },
     tabs: {
       async query() { return tabs; },
       async create(options) { const tab = { id: tabs.length + 1, ...options }; tabs.push(tab); events.push(["create", tab.id]); return tab; },
@@ -33,6 +34,14 @@ function harness(existing = {}) {
   return { local, session, tabs, events, send, chrome };
 }
 const input = { videoId: "abcdefghijk", title: "Lesson", kind: "point", start: 20.123 };
+
+test("toolbar action opens the persistent global side panel instead of a popup", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
+  assert.equal(manifest.action.default_popup, undefined);
+  assert.equal(manifest.side_panel.default_path, "popup.html");
+  assert.ok(manifest.permissions.includes("sidePanel"));
+  assert.ok(harness().events.some(event => event[0] === "panelBehavior" && event[1] === true));
+});
 
 test("concurrent saves, delete and service-worker restart retain persistent data", async () => {
   const h = harness();
@@ -84,4 +93,21 @@ test("create a tab when none exists; reuse current-window YouTube when switching
   await h.send({ type: "PLAY", id: next.id });
   assert.equal(h.tabs.length, 1);
   assert.equal(h.tabs[0].url, next.url);
+});
+
+test("panel playback uses its own window even when another window has the requested video", async () => {
+  const bookmark = core.createBookmark(input);
+  const h = harness({ local: { bookmarks: [bookmark] }, tabs: [
+    { id: 1, windowId: 1, url: bookmark.url },
+    { id: 2, windowId: 2, url: "https://www.youtube.com/" }
+  ] });
+  assert.equal((await h.send({ type: "PLAY", id: bookmark.id, windowId: 2 })).ok, true);
+  assert.equal(h.session.playback.tabId, 2);
+  assert.equal(h.tabs[1].url, bookmark.url);
+  assert.deepEqual(h.events.filter(event => event[0] === "focus"), [["focus", 2]]);
+
+  const newWindow = harness({ local: { bookmarks: [bookmark] }, tabs: [{ id: 1, windowId: 1, url: bookmark.url }] });
+  await newWindow.send({ type: "PLAY", id: bookmark.id, windowId: 2 });
+  assert.equal(newWindow.tabs.length, 2);
+  assert.equal(newWindow.tabs[1].windowId, 2);
 });

@@ -41,14 +41,29 @@ test("group newest-first across year, month and day boundaries; folder IDs inclu
     createBookmark(input, new Date(2026, 1, 1), "new")
   ];
   const groups = groupBookmarks(items);
-  assert.deepEqual(groups.map(group => group.key), ["2026", "2025"]);
-  assert.deepEqual(groups[0].ids, ["new", "late", "early"]);
-  assert.deepEqual([...groups[0].children.keys()], ["02", "01"]);
-  assert.deepEqual(groups[0].children.get("01").children.get("02").bookmarks.map(item => item.id), ["late", "early"]);
+  assert.deepEqual(groups.map(group => group.key), ["2026-02", "2026-01", "2025-12"]);
+  assert.deepEqual(groups.map(group => group.label), ["2월", "1월", "12월"]);
+  assert.deepEqual(groups[1].ids, ["late", "early"]);
+  assert.deepEqual(groups[1].children.get("02").bookmarks.map(item => item.id), ["late", "early"]);
   assert.deepEqual(groupBookmarks([]), []);
 });
 
-test("prefer same-video current-window, other-window, current-window YouTube, then new tab", () => {
+test("show year only for months shared across years without combining dates or deletion IDs", () => {
+  const items = [
+    createBookmark(input, new Date(2026, 9, 7), "current"),
+    createBookmark(input, new Date(2025, 9, 7), "previous"),
+    createBookmark(input, new Date(2025, 8, 1), "unique")
+  ];
+  const groups = groupBookmarks(items);
+  assert.deepEqual(groups.map(group => group.label), ["2026년 10월", "2025년 10월", "9월"]);
+  assert.deepEqual(groups[0].ids, ["current"]);
+  assert.deepEqual(groups[1].ids, ["previous"]);
+  assert.equal(groups[0].children.get("07").key, "2026-10-07");
+  assert.equal(groups[1].children.get("07").key, "2025-10-07");
+  assert.deepEqual(groupBookmarks(items.filter(item => item.id !== "previous")).map(group => group.label), ["10월", "9월"]);
+});
+
+test("keep playback in the panel window, preferring same video then most recently used YouTube tab", () => {
   const sameUrl = "https://www.youtube.com/watch?v=abcdefghijk";
   const tabs = [
     { id: 1, windowId: 1, url: sameUrl, lastAccessed: 10 },
@@ -57,9 +72,10 @@ test("prefer same-video current-window, other-window, current-window YouTube, th
     { id: 4, windowId: 1, url: sameUrl, lastAccessed: 20 }
   ];
   assert.equal(chooseTab(tabs, input.videoId, 1).id, 4);
-  assert.equal(chooseTab(tabs.slice(1, 3), input.videoId, 1).id, 2);
+  assert.equal(chooseTab(tabs.slice(1, 3), input.videoId, 1).id, 3);
   assert.equal(chooseTab(tabs.slice(2, 3), input.videoId, 1).id, 3);
   assert.equal(chooseTab([{ ...tabs[2], windowId: 2 }], input.videoId, 1), null);
+  assert.equal(chooseTab([tabs[1]], input.videoId, 1), null);
 });
 
 test("range state: invalid end retains start, save failure permits retry, cancel/navigation resets", () => {

@@ -61,7 +61,11 @@ function bookmarkRow(bookmark) {
   play.append(meta);
   play.addEventListener("click", async () => {
     showMessage("영상을 여는 중…");
-    try { await request({ type: "PLAY", id: bookmark.id }); showMessage("영상으로 이동했습니다."); }
+    try {
+      const { id: windowId } = await chrome.windows.getCurrent();
+      await request({ type: "PLAY", id: bookmark.id, windowId });
+      showMessage("영상으로 이동했습니다.");
+    }
     catch (error) { showMessage(error.message, true); }
   });
   const remove = element("button", "text-button danger item-delete", "×");
@@ -107,10 +111,9 @@ async function load() {
     for (const id of selected) if (!ids.has(id)) selected.delete(id);
     const groups = groupBookmarks(bookmarks);
     if (!initialized && groups.length) {
-      const year = groups[0];
-      const month = [...year.children.values()][0];
+      const month = groups[0];
       const day = [...month.children.values()][0];
-      [year, month, day].forEach(node => expanded.add(node.key));
+      [month, day].forEach(node => expanded.add(node.key));
       initialized = true;
     }
     const scroll = tree.scrollTop;
