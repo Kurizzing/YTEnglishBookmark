@@ -4,6 +4,7 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
 const core = require("../core.js");
+const captions = require("../captions.js");
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 function harness() {
@@ -60,7 +61,7 @@ function harness() {
     }
   } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../content.js"), "utf8"), {
-    EngBookmark: core, chrome, document, location, Element, Date,
+    EngBookmark: core, EngBookmarkCaptions: captions, chrome, document, location, Element, Date,
     setInterval(fn, ms) { intervals.set(ms, fn); }, setTimeout() { return 1; }, clearTimeout() {}
   });
   async function key(code, overrides = {}) {

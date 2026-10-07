@@ -16,6 +16,13 @@ async function dispatch(message, sender) {
   switch (message.type) {
     case "LIST":
       return { bookmarks: await getBookmarks() };
+    case "GET_SETTINGS":
+      return { settings: (await chrome.storage.local.get("settings")).settings || { autoCaptionRepeat: false } };
+    case "SET_SETTINGS": {
+      const settings = { autoCaptionRepeat: !!message.settings?.autoCaptionRepeat };
+      await chrome.storage.local.set({ settings });
+      return { settings };
+    }
     case "SAVE": {
       const bookmark = EngBookmark.createBookmark(message.bookmark);
       if (EngBookmark.videoId(sender.tab?.url) !== bookmark.videoId) throw new Error("영상이 변경되었습니다. 다시 저장해 주세요.");
@@ -44,7 +51,8 @@ async function dispatch(message, sender) {
       await chrome.storage.session.remove("playback");
       await stopPlayback(previous);
       if (!tab) tab = await chrome.tabs.create({ windowId: window.id, url: bookmark.url, active: true });
-      const playback = { id: crypto.randomUUID(), tabId: tab.id, bookmark, status: "pending", createdAt: Date.now() };
+      const settings = (await chrome.storage.local.get("settings")).settings || { autoCaptionRepeat: false };
+      const playback = { id: crypto.randomUUID(), tabId: tab.id, bookmark, settings, status: "pending", createdAt: Date.now() };
       await chrome.storage.session.set({ playback });
       try {
         if (EngBookmark.videoId(tab.url) !== bookmark.videoId) await chrome.tabs.update(tab.id, { url: bookmark.url, active: true });

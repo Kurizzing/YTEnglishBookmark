@@ -9,6 +9,11 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 header { flex-shrink: 0; padding: 22px 24px 20px; background: #eaf1e9; border-bottom: 1px solid #dce5d9; }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; letter-spacing: -.4px; }
 .local { margin-left: auto; font-size: 9px; letter-spacing: 1.5px; color: #617768; font-weight: 600; border: 1px solid #cbd9c8; padding: 4px 7px; border-radius: 5px; }
+.setting { display: flex; align-items: flex-start; gap: 9px; margin-top: 18px; padding: 10px 11px; border: 1px solid #d1dfd0; border-radius: 9px; background: #f8fbf7; cursor: pointer; }
+.setting input { flex: 0 0 auto; margin: 2px 0 0; accent-color: #337959; }
+.setting strong, .setting small { display: block; }
+.setting strong { font-size: 11px; }
+.setting small { margin-top: 3px; color: #718273; font-size: 10px; }
 .shortcuts { display: flex; gap: 22px; margin-top: 19px; color: #496554; font-size: 11px; }
 .shortcuts > span { display: flex; align-items: center; gap: 6px; }
 kbd { display: inline-block; min-width: 22px; padding: 3px 6px; text-align: center; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.2; background: #fff9; border: 1px solid #cbd8c8; border-bottom-width: 2px; border-radius: 5px; color: #345441; }

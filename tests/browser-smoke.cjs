@@ -36,6 +36,8 @@ async function main() {
         runtime: { async sendMessage(message) {
           testState.calls.push(message);
           if (message.type === 'LIST') return { ok: true, bookmarks: structuredClone(testState.bookmarks) };
+          if (message.type === 'GET_SETTINGS') return { ok: true, settings: { autoCaptionRepeat: false } };
+          if (message.type === 'SET_SETTINGS') return { ok: true, settings: message.settings };
           if (message.type === 'DELETE') {
             testState.bookmarks = testState.bookmarks.filter(item => !message.ids.includes(item.id));
             testState.listeners.forEach(listener => listener({ bookmarks: {} }, 'local'));
@@ -92,6 +94,8 @@ async function main() {
     assert.equal(await evaluate("document.querySelectorAll('details[open]').length"), 2);
     assert.deepEqual(await evaluate("[...document.querySelectorAll('#tree > details > summary .folder-name')].map(node => node.textContent)"), ["10월", "12월"]);
     assert.equal(await evaluate("document.querySelector('header h1, header p') === null"), true);
+    await evaluate("document.getElementById('auto-caption-repeat').click()");
+    await until("testState.calls.some(call => call.type === 'SET_SETTINGS' && call.settings.autoCaptionRepeat === true)");
     assert.equal(await evaluate("document.documentElement.scrollWidth"), 420);
     assert.equal(await evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), true);
     assert.equal(await evaluate("document.querySelector('footer').getBoundingClientRect().bottom <= 600"), true);

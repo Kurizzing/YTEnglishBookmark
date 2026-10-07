@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const { videoId, formatTime, RangeDraft } = EngBookmark;
+  const { parseJson3, sentenceRange } = EngBookmarkCaptions;
   const draft = new RangeDraft();
   let currentId = videoId(location.href);
   let navigating = false;
@@ -13,6 +14,8 @@
   let savingRange = false;
   let lastApplied = null;
   let waitStartedAt = 0;
+  let captionRequest = null;
+  let captionCache = null;
   let noticeTimer;
 
   const host = document.createElement("div");
@@ -56,6 +59,36 @@
     const response = await chrome.runtime.sendMessage(message);
     if (!response?.ok) throw new Error(response?.error || "확장 프로그램을 새로고침했다면 유튜브 페이지도 새로고침해 주세요.");
     return response;
+  }
+
+  function requestCaptions(id) {
+    if (captionCache?.videoId === id) return Promise.resolve(captionCache.cues);
+    if (captionRequest?.videoId === id) return captionRequest.promise;
+    const requestId = crypto.randomUUID();
+    let resolveRequest;
+    let rejectRequest;
+    const promise = new Promise((resolve, reject) => { resolveRequest = resolve; rejectRequest = reject; });
+    const timeout = setTimeout(() => {
+      if (captionRequest?.requestId !== requestId) return;
+      captionRequest = null;
+      rejectRequest(new Error("자막을 불러오지 못했습니다."));
+    }, 7000);
+    function receive(event) {
+      if (event.source !== window || event.data?.source !== "engbookmark-caption-source" || event.data.requestId !== requestId) return;
+      window.removeEventListener("message", receive);
+      clearTimeout(timeout);
+      captionRequest = null;
+      if (event.data.error) rejectRequest(new Error(event.data.error));
+      else {
+        const cues = event.data.format === "json3" ? parseJson3(event.data.data) : event.data.data;
+        captionCache = { videoId: id, cues };
+        resolveRequest(cues);
+      }
+    }
+    captionRequest = { requestId, videoId: id, promise };
+    window.addEventListener("message", receive);
+    window.postMessage({ source: "engbookmark-caption-request", requestId, videoId: id }, "*");
+    return promise;
   }
 
   function cancel(showNotice = false) {
@@ -180,7 +213,21 @@
       // Recheck the worker immediately before seeking: another popup click may have superseded this command.
       const { playback } = await request({ type: "STATE" });
       if (command !== target || playback?.id !== target.id || !context().ready || videoId(location.href) !== target.bookmark.videoId) return;
-      const { start, end, kind } = target.bookmark;
+      let { start, end, kind } = target.bookmark;
+      let captionAdjusted = false;
+      if (kind === "point" && target.settings?.autoCaptionRepeat) {
+        try {
+          const cues = await requestCaptions(target.bookmark.videoId);
+          const range = sentenceRange(cues, start, ctx.video.duration);
+          if (range) {
+            start = range.start;
+            end = range.end;
+            kind = "range";
+            captionAdjusted = true;
+            toast(`자막 문장 구간을 찾았습니다: ${formatTime(start)}–${formatTime(end)}`);
+          } else toast("문장 경계를 찾지 못해 저장한 시점부터 재생합니다.", 5000);
+        } catch (error) { toast(`${error.message} 저장한 시점부터 재생합니다.`, 5000); }
+      }
       if (start >= ctx.video.duration || (kind === "range" && end > ctx.video.duration + 0.1)) {
         cancel();
         toast("저장 구간이 현재 영상 길이를 벗어납니다.", 6000);
@@ -188,7 +235,7 @@
       }
       ctx.video.currentTime = start;
       lastApplied = target.id;
-      loop = kind === "range" ? { ...target.bookmark, requestId: target.id, video: ctx.video } : null;
+      loop = kind === "range" ? { ...target.bookmark, start, end, requestId: target.id, video: ctx.video, captionAdjusted } : null;
       renderStatus();
       // play() may remain pending while buffering; do not block a newer bookmark.
       ctx.video.play().catch(() => {
@@ -226,6 +273,7 @@
     navigating = true;
     awaitingMetadata = true;
     draft.cancel();
+    captionCache = null;
     if (loop || command?.status === "applied") cancel();
     renderStatus();
   });

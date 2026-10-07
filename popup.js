@@ -8,11 +8,19 @@ const dialog = document.getElementById("confirm-dialog");
 let initialized = false;
 let deleteIds = [];
 let loading = 0;
+const autoCaptionRepeat = document.getElementById("auto-caption-repeat");
 
 async function request(message) {
   const response = await chrome.runtime.sendMessage(message);
   if (!response?.ok) throw new Error(response?.error || "요청을 처리하지 못했습니다.");
   return response;
+}
+
+async function loadSettings() {
+  try {
+    const { settings } = await request({ type: "GET_SETTINGS" });
+    autoCaptionRepeat.checked = !!settings.autoCaptionRepeat;
+  } catch (error) { showMessage(error.message, true); }
 }
 
 function showMessage(text, error = false) {
@@ -138,5 +146,13 @@ dialog.addEventListener("close", async () => {
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.bookmarks) void load();
+  if (area === "local" && changes.settings) autoCaptionRepeat.checked = !!changes.settings.newValue?.autoCaptionRepeat;
+});
+autoCaptionRepeat.addEventListener("change", async () => {
+  autoCaptionRepeat.disabled = true;
+  try { await request({ type: "SET_SETTINGS", settings: { autoCaptionRepeat: autoCaptionRepeat.checked } }); }
+  catch (error) { autoCaptionRepeat.checked = !autoCaptionRepeat.checked; showMessage(error.message, true); }
+  finally { autoCaptionRepeat.disabled = false; }
 });
 void load();
+void loadSettings();
