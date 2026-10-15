@@ -31,13 +31,16 @@ async function main() {
       createBookmark(input, new Date(2025, 11, 31), "four")
     ];
     await fs.writeFile(path.join(fixture, "mock.js"), `
-      window.testState = { bookmarks: ${JSON.stringify(bookmarks)}, calls: [], listeners: [] };
+      window.testState = { bookmarks: ${JSON.stringify(bookmarks)}, settings: { autoCaptionRepeat: false, shortcuts: { point: 'KeyQ', range: 'KeyW' } }, calls: [], listeners: [] };
       window.chrome = {
         runtime: { async sendMessage(message) {
           testState.calls.push(message);
           if (message.type === 'LIST') return { ok: true, bookmarks: structuredClone(testState.bookmarks) };
-          if (message.type === 'GET_SETTINGS') return { ok: true, settings: { autoCaptionRepeat: false } };
-          if (message.type === 'SET_SETTINGS') return { ok: true, settings: message.settings };
+          if (message.type === 'GET_SETTINGS') return { ok: true, settings: testState.settings };
+          if (message.type === 'SET_SETTINGS') {
+            testState.settings = { ...testState.settings, ...message.settings, shortcuts: { ...testState.settings.shortcuts, ...message.settings.shortcuts } };
+            return { ok: true, settings: testState.settings };
+          }
           if (message.type === 'DELETE') {
             testState.bookmarks = testState.bookmarks.filter(item => !message.ids.includes(item.id));
             testState.listeners.forEach(listener => listener({ bookmarks: {} }, 'local'));
@@ -96,6 +99,12 @@ async function main() {
     assert.equal(await evaluate("document.querySelector('header h1, header p') === null"), true);
     await evaluate("document.getElementById('auto-caption-repeat').click()");
     await until("testState.calls.some(call => call.type === 'SET_SETTINGS' && call.settings.autoCaptionRepeat === true)");
+    await evaluate("document.querySelector('[data-shortcut-edit=point]').click()");
+    await evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w' }))");
+    await until("document.getElementById('message').classList.contains('error')");
+    await evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' }))");
+    await until("testState.settings.shortcuts.point === 'KeyA' && testState.settings.autoCaptionRepeat === true");
+    await until("[...document.querySelectorAll('[data-shortcut=point]')].every(node => node.textContent === 'A') && !document.getElementById('reset-shortcuts').hidden");
     assert.equal(await evaluate("document.documentElement.scrollWidth"), 420);
     assert.equal(await evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), true);
     assert.equal(await evaluate("document.querySelector('footer').getBoundingClientRect().bottom <= 600"), true);

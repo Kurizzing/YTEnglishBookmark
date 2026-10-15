@@ -18,6 +18,10 @@ header { flex-shrink: 0; padding: 22px 24px 20px; background: #eaf1e9; border-bo
 .shortcuts > span { display: flex; align-items: center; gap: 6px; }
 kbd { display: inline-block; min-width: 22px; padding: 3px 6px; text-align: center; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.2; background: #fff9; border: 1px solid #cbd8c8; border-bottom-width: 2px; border-radius: 5px; color: #345441; }
 .twice { font-size: 10px; }
+.shortcut-key { padding: 0; border: 0; background: none; border-radius: 6px; }
+.shortcut-key:hover kbd { border-color: #8fb39b; background: #fff; }
+.shortcut-key.recording kbd { border-color: #337959; background: #fff; color: #188265; }
+#reset-shortcuts { margin-left: auto; padding: 0 4px; font-size: 10px; }
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 18px 18px 12px; }
 .toolbar, .toolbar > div { display: flex; align-items: center; gap: 8px; }
 .toolbar { flex-shrink: 0; justify-content: space-between; padding: 0 5px 14px; }

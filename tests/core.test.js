@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createBookmark, videoId, localDate, formatTime, groupBookmarks, chooseTab, serialQueue, RangeDraft } = require("../core.js");
+const { createBookmark, videoId, localDate, formatTime, groupBookmarks, chooseTab, serialQueue, RangeDraft, normalizeSettings, shortcutLabel } = require("../core.js");
 const input = { videoId: "abcdefghijk", title: "Listening", kind: "point", start: 12.345 };
 
 test("normalize YouTube watch URLs, reject unsupported pages", () => {
@@ -102,4 +102,13 @@ test("serialized mutations avoid lost writes and recover after an error", async 
   await assert.rejects(enqueue(() => { throw new Error("disk full"); }));
   await enqueue(() => { value++; });
   assert.equal(value, 21);
+});
+
+test("normalize settings with default Q/W shortcuts and reject invalid or duplicate keys", () => {
+  assert.deepEqual(normalizeSettings(), { autoCaptionRepeat: false, shortcuts: { point: "KeyQ", range: "KeyW" } });
+  assert.deepEqual(normalizeSettings({ autoCaptionRepeat: 1, shortcuts: { point: "KeyA", range: "Digit1" } }).shortcuts, { point: "KeyA", range: "Digit1" });
+  assert.deepEqual(normalizeSettings({ shortcuts: { point: "Escape", range: "KeyE" } }).shortcuts, { point: "KeyQ", range: "KeyE" });
+  assert.deepEqual(normalizeSettings({ shortcuts: { point: "KeyE", range: "KeyE" } }).shortcuts, { point: "KeyQ", range: "KeyW" });
+  assert.equal(shortcutLabel("KeyA"), "A");
+  assert.equal(shortcutLabel("Digit3"), "3");
 });

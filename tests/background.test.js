@@ -111,3 +111,14 @@ test("panel playback uses its own window even when another window has the reques
   assert.equal(newWindow.tabs.length, 2);
   assert.equal(newWindow.tabs[1].windowId, 2);
 });
+
+test("settings merge partial updates and reject duplicate shortcuts", async () => {
+  const h = harness();
+  assert.deepEqual((await h.send({ type: "GET_SETTINGS" })).settings.shortcuts, { point: "KeyQ", range: "KeyW" });
+  await h.send({ type: "SET_SETTINGS", settings: { shortcuts: { point: "KeyA", range: "KeyS" } } });
+  await h.send({ type: "SET_SETTINGS", settings: { autoCaptionRepeat: true } });
+  assert.deepEqual(h.local.settings, { autoCaptionRepeat: true, shortcuts: { point: "KeyA", range: "KeyS" } });
+  assert.equal((await h.send({ type: "SET_SETTINGS", settings: { shortcuts: { point: "KeyS" } } })).ok, false);
+  assert.equal((await h.send({ type: "SET_SETTINGS", settings: { shortcuts: { point: "Escape" } } })).ok, false);
+  assert.equal(h.local.settings.shortcuts.point, "KeyA");
+});

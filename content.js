@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const { videoId, formatTime, RangeDraft } = EngBookmark;
+  const { videoId, formatTime, RangeDraft, normalizeSettings, shortcutLabel } = EngBookmark;
   const { parseJson3, sentenceRange } = EngBookmarkCaptions;
   const draft = new RangeDraft();
   let currentId = videoId(location.href);
@@ -17,6 +17,8 @@
   let captionRequest = null;
   let captionCache = null;
   let noticeTimer;
+  let shortcuts = normalizeSettings().shortcuts;
+  const rangeKey = () => shortcutLabel(shortcuts.range);
 
   const host = document.createElement("div");
   host.id = "engbookmark-overlay";
@@ -50,7 +52,7 @@
     mount();
     const range = draft.value;
     status.hidden = !range && !loop;
-    status.querySelector("span").textContent = range ? `${formatTime(range.start)}부터 구간 지정 중 · W로 끝점` :
+    status.querySelector("span").textContent = range ? `${formatTime(range.start)}부터 구간 지정 중 · ${rangeKey()}로 끝점` :
       loop ? `${formatTime(loop.start)}–${formatTime(loop.end)} 반복 중` : "";
     status.querySelector("button").textContent = range ? "구간 취소 · Esc" : "반복 해제 · Esc";
   }
@@ -142,7 +144,7 @@
       if (draft.value || loop || command?.status === "pending") cancel(true);
       return;
     }
-    if (!["KeyQ", "KeyW"].includes(event.code)) return;
+    if (event.code !== shortcuts.point && event.code !== shortcuts.range) return;
     checkNavigation();
     if (!videoId(location.href)) return;
     event.preventDefault();
@@ -153,7 +155,7 @@
       return;
     }
     try {
-      if (event.code === "KeyQ") {
+      if (event.code === shortcuts.point) {
         const start = ctx.video.currentTime;
         await request({ type: "SAVE", bookmark: bookmarkInput(ctx, "point", start) });
         toast(`${formatTime(start)} 시점을 저장했습니다.`);
@@ -162,9 +164,9 @@
         const result = draft.mark(ctx.id, ctx.video.currentTime);
         renderStatus();
         if (result.status === "started") {
-          toast("시작점을 지정했습니다. W를 다시 눌러 끝점을 저장하세요.");
+          toast(`시작점을 지정했습니다. ${rangeKey()}를 다시 눌러 끝점을 저장하세요.`);
         } else if (result.status === "invalid") {
-          toast("끝점은 시작점보다 뒤여야 합니다. 이동 후 W를 다시 눌러 주세요.");
+          toast(`끝점은 시작점보다 뒤여야 합니다. 이동 후 ${rangeKey()}를 다시 눌러 주세요.`);
         } else {
           savingRange = true;
           const savedDraft = draft.value;
@@ -297,6 +299,16 @@
       renderStatus();
     }
   });
+  function applySettings(settings) {
+    const next = normalizeSettings(settings).shortcuts;
+    if (next.range !== shortcuts.range && draft.value) draft.cancel();
+    shortcuts = next;
+    renderStatus();
+  }
+  chrome.storage?.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.settings) applySettings(changes.settings.newValue);
+  });
+  request({ type: "GET_SETTINGS" }).then(({ settings }) => applySettings(settings)).catch(() => {});
   mount();
   void sync();
   setInterval(sync, 1000);

@@ -12,13 +12,17 @@
   <header>
     <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>EngBookmark</span><span class="local">LOCAL</span></div>
     <label class="setting"><input id="auto-caption-repeat" type="checkbox"><span><strong>자막 문장 자동 반복</strong><small>시점 북마크를 문장 단위로 보정해 반복합니다</small></span></label>
-    <div class="shortcuts"><span><kbd>Q</kbd> 시점 저장</span><span><kbd>W</kbd><span class="twice">× 2</span> 구간 저장</span></div>
+    <div class="shortcuts">
+      <span><button type="button" class="shortcut-key" data-shortcut-edit="point" title="클릭한 뒤 새 키를 누르세요"><kbd data-shortcut="point">Q</kbd></button> 시점 저장</span>
+      <span><button type="button" class="shortcut-key" data-shortcut-edit="range" title="클릭한 뒤 새 키를 누르세요"><kbd data-shortcut="range">W</kbd></button><span class="twice">× 2</span> 구간 저장</span>
+      <button type="button" id="reset-shortcuts" class="text-button" hidden>기본값</button>
+    </div>
   </header>
   <main>
     <div class="toolbar"><div><h2>내 북마크</h2><span id="total">0개</span></div><button id="delete-selected" class="text-button danger" disabled>선택 삭제</button></div>
     <div id="message" role="status" hidden></div>
     <div id="tree" aria-label="날짜별 북마크"></div>
-    <div id="empty" hidden><div class="empty-mark">↺</div><h2>다시 듣고 싶은 순간을 모아보세요</h2><p>유튜브 영상을 보며 <kbd>Q</kbd>를 누르면 저장됩니다.<br><kbd>W</kbd>를 두 번 누르면 반복할 구간을 저장합니다.</p><a href="https://www.youtube.com/" target="_blank" rel="noopener">유튜브 열기 <span>↗</span></a></div>
+    <div id="empty" hidden><div class="empty-mark">↺</div><h2>다시 듣고 싶은 순간을 모아보세요</h2><p>유튜브 영상을 보며 <kbd data-shortcut="point">Q</kbd>를 누르면 저장됩니다.<br><kbd data-shortcut="range">W</kbd>를 두 번 누르면 반복할 구간을 저장합니다.</p><a href="https://www.youtube.com/" target="_blank" rel="noopener">유튜브 열기 <span>↗</span></a></div>
   </main>
   <footer><span class="dot"></span> 이 크롬에 저장됨 <span class="footer-right">구간 클릭으로 반복 · Esc로 해제</span></footer>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title">

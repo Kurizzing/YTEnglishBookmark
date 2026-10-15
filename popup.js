@@ -1,5 +1,5 @@
 "use strict";
-const { groupBookmarks, formatTime } = EngBookmark;
+const { groupBookmarks, formatTime, normalizeSettings, shortcutLabel, isShortcutCode, DEFAULT_SHORTCUTS } = EngBookmark;
 const tree = document.getElementById("tree");
 const selected = new Set();
 const expanded = new Set();
@@ -9,6 +9,10 @@ let initialized = false;
 let deleteIds = [];
 let loading = 0;
 const autoCaptionRepeat = document.getElementById("auto-caption-repeat");
+const resetShortcuts = document.getElementById("reset-shortcuts");
+const shortcutNames = { point: "시점 저장", range: "구간 저장" };
+let settings = normalizeSettings();
+let recording = null;
 
 async function request(message) {
   const response = await chrome.runtime.sendMessage(message);
@@ -18,9 +22,29 @@ async function request(message) {
 
 async function loadSettings() {
   try {
-    const { settings } = await request({ type: "GET_SETTINGS" });
-    autoCaptionRepeat.checked = !!settings.autoCaptionRepeat;
+    renderSettings((await request({ type: "GET_SETTINGS" })).settings);
   } catch (error) { showMessage(error.message, true); }
+}
+
+function renderSettings(value) {
+  settings = normalizeSettings(value);
+  autoCaptionRepeat.checked = settings.autoCaptionRepeat;
+  for (const node of document.querySelectorAll("[data-shortcut]")) node.textContent = shortcutLabel(settings.shortcuts[node.dataset.shortcut]);
+  resetShortcuts.hidden = settings.shortcuts.point === DEFAULT_SHORTCUTS.point && settings.shortcuts.range === DEFAULT_SHORTCUTS.range;
+}
+
+async function saveShortcuts(shortcuts) {
+  try {
+    renderSettings((await request({ type: "SET_SETTINGS", settings: { shortcuts } })).settings);
+    showMessage(`단축키: ${shortcutLabel(settings.shortcuts.point)} 시점 저장 · ${shortcutLabel(settings.shortcuts.range)} 구간 저장`);
+  } catch (error) { showMessage(error.message, true); }
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording.classList.remove("recording");
+  recording.querySelector("kbd").textContent = shortcutLabel(settings.shortcuts[recording.dataset.shortcutEdit]);
+  recording = null;
 }
 
 function showMessage(text, error = false) {
@@ -146,7 +170,7 @@ dialog.addEventListener("close", async () => {
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.bookmarks) void load();
-  if (area === "local" && changes.settings) autoCaptionRepeat.checked = !!changes.settings.newValue?.autoCaptionRepeat;
+  if (area === "local" && changes.settings) { stopRecording(); renderSettings(changes.settings.newValue); }
 });
 autoCaptionRepeat.addEventListener("change", async () => {
   autoCaptionRepeat.disabled = true;
@@ -154,5 +178,36 @@ autoCaptionRepeat.addEventListener("change", async () => {
   catch (error) { autoCaptionRepeat.checked = !autoCaptionRepeat.checked; showMessage(error.message, true); }
   finally { autoCaptionRepeat.disabled = false; }
 });
+for (const button of document.querySelectorAll("[data-shortcut-edit]")) {
+  button.addEventListener("click", () => {
+    const same = recording === button;
+    stopRecording();
+    if (same) return;
+    recording = button;
+    button.classList.add("recording");
+    button.querySelector("kbd").textContent = "…";
+    showMessage(`${shortcutNames[button.dataset.shortcutEdit]}에 쓸 키를 누르세요 (영문자·숫자, Esc 취소)`);
+  });
+}
+document.addEventListener("keydown", event => {
+  if (!recording || event.repeat) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const action = recording.dataset.shortcutEdit;
+  const other = action === "point" ? "range" : "point";
+  if (event.code === "Escape") { stopRecording(); showMessage(""); return; }
+  if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+  if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !isShortcutCode(event.code)) {
+    showMessage("조합키 없이 영문자나 숫자 키 하나만 사용할 수 있습니다.", true);
+    return;
+  }
+  if (event.code === settings.shortcuts[other]) {
+    showMessage(`${shortcutLabel(event.code)} 키는 이미 ${shortcutNames[other]}에 쓰이고 있습니다.`, true);
+    return;
+  }
+  stopRecording();
+  void saveShortcuts({ ...settings.shortcuts, [action]: event.code });
+}, true);
+resetShortcuts.addEventListener("click", () => { stopRecording(); void saveShortcuts({ ...DEFAULT_SHORTCUTS }); });
 void load();
 void loadSettings();

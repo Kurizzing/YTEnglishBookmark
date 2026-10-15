@@ -85,6 +85,24 @@
     };
   }
 
+  const DEFAULT_SHORTCUTS = Object.freeze({ point: "KeyQ", range: "KeyW" });
+
+  function isShortcutCode(code) {
+    return /^(Key[A-Z]|Digit[0-9])$/.test(code || "");
+  }
+
+  function shortcutLabel(code) {
+    return String(code).replace(/^(Key|Digit)/, "");
+  }
+
+  function normalizeSettings(input) {
+    const shortcuts = input?.shortcuts || {};
+    let point = isShortcutCode(shortcuts.point) ? shortcuts.point : DEFAULT_SHORTCUTS.point;
+    let range = isShortcutCode(shortcuts.range) ? shortcuts.range : DEFAULT_SHORTCUTS.range;
+    if (point === range) ({ point, range } = DEFAULT_SHORTCUTS);
+    return { autoCaptionRepeat: !!input?.autoCaptionRepeat, shortcuts: { point, range } };
+  }
+
   class RangeDraft {
     constructor() { this.cancel(); }
     cancel() { this.value = null; }
@@ -99,7 +117,7 @@
     }
   }
 
-  const api = { videoId, localDate, formatTime, createBookmark, groupBookmarks, chooseTab, serialQueue, RangeDraft };
+  const api = { videoId, localDate, formatTime, createBookmark, groupBookmarks, chooseTab, serialQueue, RangeDraft, DEFAULT_SHORTCUTS, isShortcutCode, shortcutLabel, normalizeSettings };
   root.EngBookmark = api;
   if (typeof module !== "undefined") module.exports = api;
 })(globalThis);

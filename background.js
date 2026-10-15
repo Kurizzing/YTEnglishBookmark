@@ -5,6 +5,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(consol
 
 const queue = EngBookmark.serialQueue();
 const getBookmarks = async () => (await chrome.storage.local.get("bookmarks")).bookmarks || [];
+const getSettings = async () => EngBookmark.normalizeSettings((await chrome.storage.local.get("settings")).settings);
 const getPlayback = async () => (await chrome.storage.session.get("playback")).playback || null;
 
 async function stopPlayback(playback) {
@@ -17,9 +18,14 @@ async function dispatch(message, sender) {
     case "LIST":
       return { bookmarks: await getBookmarks() };
     case "GET_SETTINGS":
-      return { settings: (await chrome.storage.local.get("settings")).settings || { autoCaptionRepeat: false } };
+      return { settings: await getSettings() };
     case "SET_SETTINGS": {
-      const settings = { autoCaptionRepeat: !!message.settings?.autoCaptionRepeat };
+      const current = await getSettings();
+      const patch = message.settings || {};
+      const shortcuts = { ...current.shortcuts, ...patch.shortcuts };
+      if (shortcuts.point === shortcuts.range) throw new Error("두 단축키는 서로 달라야 합니다.");
+      if (![shortcuts.point, shortcuts.range].every(EngBookmark.isShortcutCode)) throw new Error("영문자나 숫자 키만 사용할 수 있습니다.");
+      const settings = EngBookmark.normalizeSettings({ ...current, ...patch, shortcuts });
       await chrome.storage.local.set({ settings });
       return { settings };
     }
@@ -51,7 +57,7 @@ async function dispatch(message, sender) {
       await chrome.storage.session.remove("playback");
       await stopPlayback(previous);
       if (!tab) tab = await chrome.tabs.create({ windowId: window.id, url: bookmark.url, active: true });
-      const settings = (await chrome.storage.local.get("settings")).settings || { autoCaptionRepeat: false };
+      const settings = await getSettings();
       const playback = { id: crypto.randomUUID(), tabId: tab.id, bookmark, settings, status: "pending", createdAt: Date.now() };
       await chrome.storage.session.set({ playback });
       try {

@@ -7,7 +7,7 @@ const core = require("../core.js");
 const captions = require("../captions.js");
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function harness() {
+function harness(settings) {
   const events = new Map();
   const intervals = new Map();
   const sent = [];
@@ -50,6 +50,7 @@ function harness() {
     onMessage: { addListener(callback) { runtimeListener = callback; } },
     async sendMessage(message) {
       sent.push(message);
+      if (message.type === "GET_SETTINGS") return { ok: true, settings };
       if (message.type === "STATE") return { ok: true, playback: structuredClone(state.playback) };
       if (message.type === "SAVE") {
         if (state.failure) return { ok: false, error: "quota exceeded" };
@@ -249,4 +250,17 @@ test("navigation finish alone cannot seek the previous video's loaded media", as
   h.events.get("loadedmetadata")({ target: h.video });
   await h.tick();
   assert.equal(h.video.currentTime, 20);
+});
+
+test("custom shortcuts replace Q/W", async () => {
+  const h = harness({ shortcuts: { point: "KeyA", range: "KeyS" } });
+  await flush();
+  assert.equal(await h.key("KeyQ"), false);
+  await h.key("KeyA");
+  assert.equal(h.saved.at(-1).kind, "point");
+  await h.key("KeyS");
+  assert.match(h.notice.textContent, /S를 다시 눌러/);
+  h.video.currentTime = 20;
+  await h.key("KeyS");
+  assert.equal(h.saved.at(-1).kind, "range");
 });
