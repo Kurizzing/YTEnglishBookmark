@@ -10,7 +10,7 @@
 </head>
 <body>
   <header>
-    <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>EngBookmark</span><span class="local">LOCAL</span></div>
+    <div class="brand"><img src="icons/icon32.png" alt="" width="32" height="32"><span>EngBookmark</span><span class="local">SYNC</span></div>
     <label class="setting"><input id="auto-caption-repeat" type="checkbox"><span><strong>자막 문장 자동 반복</strong><small>시점 북마크를 문장 단위로 보정해 반복합니다</small></span></label>
     <div class="shortcuts">
       <span><button type="button" class="shortcut-key" data-shortcut-edit="point" title="클릭한 뒤 새 키를 누르세요"><kbd data-shortcut="point">Q</kbd></button> 시점 저장</span>
@@ -19,12 +19,12 @@
     </div>
   </header>
   <main>
-    <div class="toolbar"><div><h2>내 북마크</h2><span id="total">0개</span></div><button id="delete-selected" class="text-button danger" disabled>선택 삭제</button></div>
+    <div class="toolbar"><div><h2>내 북마크</h2><span id="total">0개</span></div><div><button id="export" class="text-button" title="북마크를 JSON 파일로 저장">백업</button><button id="import" class="text-button" title="백업 파일의 북마크 추가">복원</button><input id="import-file" type="file" accept="application/json,.json" hidden><button id="delete-selected" class="text-button danger" disabled>선택 삭제</button></div></div>
     <div id="message" role="status" hidden></div>
     <div id="tree" aria-label="날짜별 북마크"></div>
     <div id="empty" hidden><div class="empty-mark">↺</div><h2>다시 듣고 싶은 순간을 모아보세요</h2><p>유튜브 영상을 보며 <kbd data-shortcut="point">Q</kbd>를 누르면 저장됩니다.<br><kbd data-shortcut="range">W</kbd>를 두 번 누르면 반복할 구간을 저장합니다.</p><a href="https://www.youtube.com/" target="_blank" rel="noopener">유튜브 열기 <span>↗</span></a></div>
   </main>
-  <footer><span class="dot"></span> 이 크롬에 저장됨 <span class="footer-right">구간 클릭으로 반복 · Esc로 해제</span></footer>
+  <footer><span class="dot"></span> <span id="storage-status">크롬 계정에 동기화</span> <span class="footer-right">구간 클릭으로 반복 · Esc로 해제</span></footer>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title">
     <form method="dialog"><h2 id="confirm-title">북마크를 삭제할까요?</h2><p id="confirm-description"></p><div class="dialog-actions"><button value="cancel" autofocus>취소</button><button value="delete" class="delete-confirm">삭제</button></div></form>
   </dialog>

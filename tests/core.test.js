@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createBookmark, videoId, localDate, formatTime, groupBookmarks, chooseTab, serialQueue, RangeDraft, normalizeSettings, shortcutLabel } = require("../core.js");
+const { createBookmark, videoId, localDate, formatTime, groupBookmarks, chooseTab, serialQueue, RangeDraft, normalizeSettings, shortcutLabel, packBookmark, unpackBookmark, restoreBookmark, syncEntrySize } = require("../core.js");
 const input = { videoId: "abcdefghijk", title: "Listening", kind: "point", start: 12.345 };
 
 test("normalize YouTube watch URLs, reject unsupported pages", () => {
@@ -111,4 +111,18 @@ test("normalize settings with default Q/W shortcuts and reject invalid or duplic
   assert.deepEqual(normalizeSettings({ shortcuts: { point: "KeyE", range: "KeyE" } }).shortcuts, { point: "KeyQ", range: "KeyW" });
   assert.equal(shortcutLabel("KeyA"), "A");
   assert.equal(shortcutLabel("Digit3"), "3");
+});
+
+test("compact sync form round-trips bookmarks and rejects corrupted entries", () => {
+  const bookmark = createBookmark({ ...input, title: "x".repeat(200), kind: "range", end: 12.349 }, new Date(2026, 3, 5, 6, 7));
+  const packed = packBookmark(bookmark);
+  assert.equal(packed.t.length, 80);
+  const restored = unpackBookmark(bookmark.id, packed);
+  assert.equal(restored.start, 12.35);
+  assert.ok(restored.end > restored.start);
+  assert.equal(restored.createdAt, bookmark.createdAt);
+  assert.equal(restored.date, "2026-04-05");
+  assert.equal(unpackBookmark("id", { v: "bad" }), null);
+  assert.equal(restoreBookmark({ ...bookmark, id: "../x" }), null);
+  assert.ok(syncEntrySize("b:" + bookmark.id, packed) < 200);
 });

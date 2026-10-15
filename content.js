@@ -306,7 +306,7 @@
     renderStatus();
   }
   chrome.storage?.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.settings) applySettings(changes.settings.newValue);
+    if (area === "sync" && changes.settings) applySettings(changes.settings.newValue);
   });
   request({ type: "GET_SETTINGS" }).then(({ settings }) => applySettings(settings)).catch(() => {});
   mount();

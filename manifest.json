@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArUo86K/WwYEpp9STPwH9lQKUg/DEB36bRjko2EH3KHGycK7FATFYZSCOeZYLFHLJ8XJfVyRhBF5bSBCCw5K+d0atgOBYU+OiaLBmTUnU9G2z6KCHLj+tZijkB2170lB61l8M1YqpJBuclZCc8wAtfOOrRzRRO9P7lQ4vz2/URRf9BINgw21826CpKXgskcCG5o8RFdWl89ctu5Va4Z3oO7hAM7eAOpDzxdIZjfW1FKrt9DeYTQ+XzKRnW6NcUjwmgtFpxCX3+GSdroj8XLtRCadsth3hhwFWul+R+OGXIlpN1SjFsdO4pXByKCYQCByci6Ju8MetCRBjFotNcwcKPwIDAQAB",
   "name": "EngBookmark · 영어 듣기 북마크",
   "version": "1.2.0",
   "minimum_chrome_version": "114",

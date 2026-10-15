@@ -47,6 +47,39 @@ function stopRecording() {
   recording = null;
 }
 
+function renderStorage(bookmarks, usage) {
+  const localOnly = bookmarks.filter(bookmark => bookmark.localOnly).length;
+  const percent = usage ? Math.min(100, Math.round(usage.bytes / usage.quota * 100)) : 0;
+  const status = document.getElementById("storage-status");
+  status.textContent = localOnly ? `동기화 공간 부족 · ${localOnly}개는 이 PC에만 저장됨` : `크롬 계정에 동기화 · ${percent}% 사용`;
+  status.title = "크롬 동기화 저장 공간은 약 100KB(북마크 약 500개)입니다. 넘치는 북마크는 이 PC에만 저장되고, 공간이 생기면 자동으로 동기화됩니다.";
+  document.querySelector("footer .dot").classList.toggle("warning", localOnly > 0);
+}
+
+async function exportBookmarks() {
+  try {
+    const { bookmarks } = await request({ type: "LIST" });
+    const data = { app: "engbookmark", version: 1, exportedAt: new Date().toISOString(), bookmarks: bookmarks.map(({ localOnly, ...bookmark }) => bookmark) };
+    const link = element("a");
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    link.download = `engbookmark-${EngBookmark.localDate(new Date())}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    showMessage(`북마크 ${bookmarks.length}개를 백업 파일로 저장했습니다.`);
+  } catch (error) { showMessage(error.message, true); }
+}
+
+async function importBookmarks(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    const bookmarks = Array.isArray(data) ? data : data?.bookmarks;
+    if (!Array.isArray(bookmarks)) throw new Error("EngBookmark 백업 파일이 아닙니다.");
+    const { added, skipped, localOnly } = await request({ type: "IMPORT", bookmarks });
+    showMessage(`${added}개를 복원했습니다.` + (skipped ? ` 이미 있거나 잘못된 ${skipped}개는 건너뛰었습니다.` : "") + (localOnly ? ` ${localOnly}개는 공간이 부족해 이 PC에만 저장했습니다.` : ""));
+    await load();
+  } catch (error) { showMessage(error instanceof SyntaxError ? "백업 파일을 읽을 수 없습니다." : error.message, true); }
+}
+
 function showMessage(text, error = false) {
   const message = document.getElementById("message");
   message.textContent = text;
@@ -89,6 +122,7 @@ function bookmarkRow(bookmark) {
   play.append(element("span", "bookmark-title", bookmark.title));
   const meta = element("span", "bookmark-meta");
   meta.append(element("span", `badge ${bookmark.kind === "range" ? "range" : ""}`, bookmark.kind === "range" ? "↺ 구간" : "▶ 시점"));
+  if (bookmark.localOnly) meta.append(element("span", "badge local-only", "이 PC만"));
   meta.append(element("span", "time", bookmark.kind === "range" ? `${formatTime(bookmark.start)}–${formatTime(bookmark.end)}` : formatTime(bookmark.start)));
   play.append(meta);
   play.addEventListener("click", async () => {
@@ -137,8 +171,9 @@ function folder(node) {
 async function load() {
   const version = ++loading;
   try {
-    const { bookmarks } = await request({ type: "LIST" });
+    const { bookmarks, usage } = await request({ type: "LIST" });
     if (version !== loading) return;
+    renderStorage(bookmarks, usage);
     const ids = new Set(bookmarks.map(bookmark => bookmark.id));
     for (const id of selected) if (!ids.has(id)) selected.delete(id);
     const groups = groupBookmarks(bookmarks);
@@ -157,6 +192,14 @@ async function load() {
   } catch (error) { showMessage(error.message, true); }
 }
 
+const importFile = document.getElementById("import-file");
+document.getElementById("export").addEventListener("click", exportBookmarks);
+document.getElementById("import").addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", () => {
+  const [file] = importFile.files;
+  importFile.value = "";
+  if (file) void importBookmarks(file);
+});
 deleteSelected.addEventListener("click", () => confirmDelete([...selected]));
 dialog.addEventListener("close", async () => {
   if (dialog.returnValue !== "delete") return;
@@ -169,8 +212,8 @@ dialog.addEventListener("close", async () => {
   } catch (error) { showMessage(error.message, true); }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.bookmarks) void load();
-  if (area === "local" && changes.settings) { stopRecording(); renderSettings(changes.settings.newValue); }
+  if ((area === "sync" && Object.keys(changes).some(key => key.startsWith(EngBookmark.SYNC_PREFIX))) || (area === "local" && changes.localBookmarks)) void load();
+  if (area === "sync" && changes.settings) { stopRecording(); renderSettings(changes.settings.newValue); }
 });
 autoCaptionRepeat.addEventListener("change", async () => {
   autoCaptionRepeat.disabled = true;

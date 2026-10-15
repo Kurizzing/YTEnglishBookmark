@@ -35,7 +35,8 @@ async function main() {
       window.chrome = {
         runtime: { async sendMessage(message) {
           testState.calls.push(message);
-          if (message.type === 'LIST') return { ok: true, bookmarks: structuredClone(testState.bookmarks) };
+          if (message.type === 'LIST') return { ok: true, bookmarks: structuredClone(testState.bookmarks), usage: { bytes: 25000, quota: 100352 } };
+          if (message.type === 'IMPORT') { testState.bookmarks.push(...message.bookmarks.map(item => ({ ...item, id: item.id + '-copy', localOnly: true }))); return { ok: true, added: message.bookmarks.length, skipped: 0, localOnly: message.bookmarks.length }; }
           if (message.type === 'GET_SETTINGS') return { ok: true, settings: testState.settings };
           if (message.type === 'SET_SETTINGS') {
             testState.settings = { ...testState.settings, ...message.settings, shortcuts: { ...testState.settings.shortcuts, ...message.settings.shortcuts } };
@@ -43,7 +44,7 @@ async function main() {
           }
           if (message.type === 'DELETE') {
             testState.bookmarks = testState.bookmarks.filter(item => !message.ids.includes(item.id));
-            testState.listeners.forEach(listener => listener({ bookmarks: {} }, 'local'));
+            testState.listeners.forEach(listener => listener({ 'b:changed': {} }, 'sync'));
           }
           return { ok: true };
         } },
@@ -105,6 +106,7 @@ async function main() {
     await evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' }))");
     await until("testState.settings.shortcuts.point === 'KeyA' && testState.settings.autoCaptionRepeat === true");
     await until("[...document.querySelectorAll('[data-shortcut=point]')].every(node => node.textContent === 'A') && !document.getElementById('reset-shortcuts').hidden");
+    assert.equal(await evaluate("document.getElementById('storage-status').textContent"), "크롬 계정에 동기화 · 25% 사용");
     assert.equal(await evaluate("document.documentElement.scrollWidth"), 420);
     assert.equal(await evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), true);
     assert.equal(await evaluate("document.querySelector('footer').getBoundingClientRect().bottom <= 600"), true);
@@ -117,8 +119,12 @@ async function main() {
     await evaluate("document.querySelectorAll('.play')[1].click()");
     await until("testState.calls.some(call => call.type === 'PLAY' && call.id === 'one' && call.windowId === 7)");
     assert.equal(await evaluate("document.querySelectorAll('.bookmark').length"), 4);
+    await evaluate(`(() => { const input = document.getElementById('import-file'); const data = new DataTransfer(); data.items.add(new File([JSON.stringify({ bookmarks: [testState.bookmarks[0]] })], 'backup.json')); input.files = data.files; input.dispatchEvent(new Event('change')); })()`);
+    await until("document.querySelectorAll('.bookmark').length === 5 && document.querySelector('.local-only') && document.getElementById('storage-status').textContent.includes('1개는 이 PC에만')");
+    await evaluate("testState.bookmarks.pop(); testState.listeners.forEach(listener => listener({ 'b:changed': {} }, 'sync'))");
+    await until("document.querySelectorAll('.bookmark').length === 4");
     // Same month in another year gets a year label, not an extra folder level.
-    await evaluate("testState.bookmarks[3].date = '2025-10-05'; testState.listeners.forEach(listener => listener({ bookmarks: {} }, 'local'))");
+    await evaluate("testState.bookmarks[3].date = '2025-10-05'; testState.listeners.forEach(listener => listener({ 'b:changed': {} }, 'sync'))");
     await until("document.querySelectorAll('#tree > details > summary .folder-name')[1].textContent === '2025년 10월'");
     assert.equal(await evaluate("document.querySelector('#tree > details > summary .folder-name').textContent"), "2026년 10월");
     await cdp("Emulation.setDeviceMetricsOverride", { width: 320, height: 720, deviceScaleFactor: 1, mobile: false });

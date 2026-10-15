@@ -4,8 +4,78 @@ importScripts("core.js");
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
 const queue = EngBookmark.serialQueue();
-const getBookmarks = async () => (await chrome.storage.local.get("bookmarks")).bookmarks || [];
-const getSettings = async () => EngBookmark.normalizeSettings((await chrome.storage.local.get("settings")).settings);
+const { SYNC_PREFIX, packBookmark, unpackBookmark, syncEntrySize } = EngBookmark;
+// Leave room for settings and per-item overhead below chrome.storage.sync's hard limits.
+const SYNC_BUDGET = (chrome.storage.sync.QUOTA_BYTES ?? 102400) - 2048;
+const SYNC_MAX_ITEMS = (chrome.storage.sync.MAX_ITEMS ?? 512) - 4;
+const getSettings = async () => EngBookmark.normalizeSettings((await chrome.storage.sync.get("settings")).settings);
+const getLocalOnly = async () => (await chrome.storage.local.get("localBookmarks")).localBookmarks || [];
+
+async function readSync() {
+  const entries = Object.entries(await chrome.storage.sync.get(null));
+  const usage = { bytes: entries.reduce((sum, [key, value]) => sum + syncEntrySize(key, value), 0), items: entries.length };
+  const bookmarks = entries.filter(([key]) => key.startsWith(SYNC_PREFIX)).map(([key, value]) => unpackBookmark(key.slice(SYNC_PREFIX.length), value)).filter(Boolean);
+  return { bookmarks, usage };
+}
+
+async function getBookmarks() {
+  const [{ bookmarks }, localOnly] = await Promise.all([readSync(), getLocalOnly()]);
+  return [...bookmarks, ...localOnly.map(bookmark => ({ ...bookmark, localOnly: true }))];
+}
+
+// Writes as many bookmarks to sync as fit in one call and returns the rest for local storage.
+async function writeSync(bookmarks) {
+  const { usage } = await readSync();
+  const entries = {};
+  const rest = [];
+  for (const bookmark of bookmarks) {
+    const key = SYNC_PREFIX + bookmark.id;
+    const value = packBookmark(bookmark);
+    const size = syncEntrySize(key, value);
+    if (usage.bytes + size <= SYNC_BUDGET && usage.items < SYNC_MAX_ITEMS) {
+      entries[key] = value;
+      usage.bytes += size;
+      usage.items++;
+    } else rest.push(bookmark);
+  }
+  if (!Object.keys(entries).length) return rest;
+  try {
+    await chrome.storage.sync.set(entries);
+    return rest;
+  } catch (error) {
+    console.warn("Bookmark sync failed; keeping on this device.", error);
+    return bookmarks;
+  }
+}
+
+// Moves device-only bookmarks into sync once space is available (e.g. after deletions elsewhere).
+async function promoteLocalOnly() {
+  const localOnly = await getLocalOnly();
+  if (!localOnly.length) return;
+  const synced = new Set((await readSync()).bookmarks.map(bookmark => bookmark.id));
+  const pending = localOnly.filter(bookmark => !synced.has(bookmark.id));
+  const rest = await writeSync(pending);
+  if (rest.length !== localOnly.length) await chrome.storage.local.set({ localBookmarks: rest });
+}
+
+// Older versions kept everything in storage.local; the original array is left in place as a backup.
+async function migrate() {
+  const { bookmarks: legacy, settings, syncMigrated } = await chrome.storage.local.get(["bookmarks", "settings", "syncMigrated"]);
+  if (syncMigrated) return;
+  if (settings && !(await chrome.storage.sync.get("settings")).settings) await chrome.storage.sync.set({ settings: EngBookmark.normalizeSettings(settings) });
+  if (legacy?.length) {
+    const known = new Set((await getBookmarks()).map(bookmark => bookmark.id));
+    await chrome.storage.local.set({ localBookmarks: [...await getLocalOnly(), ...legacy.filter(bookmark => !known.has(bookmark.id))] });
+  }
+  await chrome.storage.local.set({ syncMigrated: true });
+}
+
+async function addBookmarks(bookmarks) {
+  const rest = await writeSync(bookmarks);
+  if (rest.length) await chrome.storage.local.set({ localBookmarks: [...await getLocalOnly(), ...rest] });
+  return rest.length;
+}
+
 const getPlayback = async () => (await chrome.storage.session.get("playback")).playback || null;
 
 async function stopPlayback(playback) {
@@ -15,8 +85,10 @@ async function stopPlayback(playback) {
 
 async function dispatch(message, sender) {
   switch (message.type) {
-    case "LIST":
-      return { bookmarks: await getBookmarks() };
+    case "LIST": {
+      const { usage } = await readSync();
+      return { bookmarks: await getBookmarks(), usage: { bytes: usage.bytes, quota: SYNC_BUDGET } };
+    }
     case "GET_SETTINGS":
       return { settings: await getSettings() };
     case "SET_SETTINGS": {
@@ -26,20 +98,28 @@ async function dispatch(message, sender) {
       if (shortcuts.point === shortcuts.range) throw new Error("두 단축키는 서로 달라야 합니다.");
       if (![shortcuts.point, shortcuts.range].every(EngBookmark.isShortcutCode)) throw new Error("영문자나 숫자 키만 사용할 수 있습니다.");
       const settings = EngBookmark.normalizeSettings({ ...current, ...patch, shortcuts });
-      await chrome.storage.local.set({ settings });
+      await chrome.storage.sync.set({ settings });
       return { settings };
     }
     case "SAVE": {
       const bookmark = EngBookmark.createBookmark(message.bookmark);
       if (EngBookmark.videoId(sender.tab?.url) !== bookmark.videoId) throw new Error("영상이 변경되었습니다. 다시 저장해 주세요.");
-      const bookmarks = await getBookmarks();
-      await chrome.storage.local.set({ bookmarks: [...bookmarks, bookmark] });
-      return { bookmark };
+      const localOnly = await addBookmarks([bookmark]) > 0;
+      return { bookmark: { ...bookmark, ...(localOnly ? { localOnly } : {}) } };
+    }
+    case "IMPORT": {
+      const known = new Set((await getBookmarks()).map(bookmark => bookmark.id));
+      const restored = (Array.isArray(message.bookmarks) ? message.bookmarks : []).map(EngBookmark.restoreBookmark).filter(Boolean);
+      const added = restored.filter(bookmark => !known.has(bookmark.id) && known.add(bookmark.id));
+      const localOnly = added.length ? await addBookmarks(added) : 0;
+      return { added: added.length, skipped: (message.bookmarks?.length || 0) - added.length, localOnly };
     }
     case "DELETE": {
       const ids = new Set(message.ids);
-      const bookmarks = await getBookmarks();
-      await chrome.storage.local.set({ bookmarks: bookmarks.filter(bookmark => !ids.has(bookmark.id)) });
+      await chrome.storage.sync.remove([...ids].map(id => SYNC_PREFIX + id));
+      const localOnly = await getLocalOnly();
+      if (localOnly.some(bookmark => ids.has(bookmark.id))) await chrome.storage.local.set({ localBookmarks: localOnly.filter(bookmark => !ids.has(bookmark.id)) });
+      await promoteLocalOnly();
       const playback = await getPlayback();
       if (playback && ids.has(playback.bookmark.id)) {
         await chrome.storage.session.remove("playback");
@@ -100,6 +180,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     error => sendResponse({ ok: false, error: error.message || "요청을 처리하지 못했습니다." })
   );
   return true;
+});
+
+queue(async () => {
+  await migrate();
+  await promoteLocalOnly();
+}).catch(console.error);
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  // Deletions on another device may free room for bookmarks kept only on this one.
+  if (area === "sync" && Object.entries(changes).some(([key, change]) => key.startsWith(SYNC_PREFIX) && change.newValue === undefined)) {
+    queue(promoteLocalOnly).catch(console.error);
+  }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {

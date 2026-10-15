@@ -23,7 +23,12 @@
     return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${String(minutes).padStart(2, "0")}:${rest}`;
   }
 
-  function createBookmark(input, now = new Date(), id = crypto.randomUUID()) {
+  function shortId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(9));
+    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_");
+  }
+
+  function createBookmark(input, now = new Date(), id = shortId()) {
     if (!input || !/^[\w-]{11}$/.test(input.videoId || "") || !["point", "range"].includes(input.kind) ||
         !Number.isFinite(input.start) || input.start < 0 ||
         (input.kind === "range" && (!Number.isFinite(input.end) || input.end <= input.start))) {
@@ -40,6 +45,47 @@
       createdAt: now.toISOString(),
       date: localDate(now)
     };
+  }
+
+  const SYNC_PREFIX = "b:";
+  const MAX_TITLE = 80;
+  const roundTime = value => Math.round(value * 100) / 100;
+
+  // chrome.storage.sync allows only ~100KB, so each bookmark is stored in a short form.
+  function packBookmark(bookmark) {
+    const start = roundTime(bookmark.start);
+    return {
+      v: bookmark.videoId,
+      t: String(bookmark.title).slice(0, MAX_TITLE),
+      s: start,
+      ...(bookmark.kind === "range" ? { e: Math.max(roundTime(bookmark.end), start + 0.01) } : {}),
+      c: Date.parse(bookmark.createdAt)
+    };
+  }
+
+  function unpackBookmark(id, packed) {
+    try {
+      const created = new Date(packed.c);
+      const bookmark = createBookmark({ videoId: packed.v, title: packed.t, kind: packed.e === undefined ? "point" : "range", start: packed.s, end: packed.e }, created, id);
+      return Number.isNaN(created.getTime()) ? null : bookmark;
+    } catch {
+      return null;
+    }
+  }
+
+  // Validates bookmarks read from a backup file while keeping their identity and save date.
+  function restoreBookmark(raw) {
+    try {
+      const created = new Date(raw.createdAt);
+      if (typeof raw.id !== "string" || !/^[\w-]{1,64}$/.test(raw.id) || Number.isNaN(created.getTime())) return null;
+      return createBookmark(raw, created, raw.id);
+    } catch {
+      return null;
+    }
+  }
+
+  function syncEntrySize(key, value) {
+    return new TextEncoder().encode(key + JSON.stringify(value)).length;
   }
 
   function groupBookmarks(bookmarks) {
@@ -117,7 +163,7 @@
     }
   }
 
-  const api = { videoId, localDate, formatTime, createBookmark, groupBookmarks, chooseTab, serialQueue, RangeDraft, DEFAULT_SHORTCUTS, isShortcutCode, shortcutLabel, normalizeSettings };
+  const api = { videoId, localDate, formatTime, createBookmark, groupBookmarks, chooseTab, serialQueue, RangeDraft, shortId, SYNC_PREFIX, packBookmark, unpackBookmark, restoreBookmark, syncEntrySize, DEFAULT_SHORTCUTS, isShortcutCode, shortcutLabel, normalizeSettings };
   root.EngBookmark = api;
   if (typeof module !== "undefined") module.exports = api;
 })(globalThis);
